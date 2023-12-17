@@ -7,19 +7,19 @@ import numpy as np
 def data_transformation(img_array, output_dir, qty=1):
     for i in range(qty):
         datagen = ImageDataGenerator(
-            # # Random rotation in the range [-30, 30] degrees
-            rotation_range=30,
-            # # zoom_range=[0.8, 1.2],  # Random zoom in the range [0.8, 1.2]
-            # # width_shift_range=0.1,  # Random horizontal shift
-            # # height_shift_range=0.1,  # Random vertical shift
-            # # shear_range=0.2,  # Random shear
-            # # brightness_range=[0.5, 1.5],  # Random brightness adjustment
-            # # channel_shift_range=20,  # Random channel shift
-            # # horizontal_flip=True,  # Random horizontal flip
-            # # vertical_flip=True,  # Random vertical flip
-            # # fill_mode='nearest',  # Fill mode for handling newly created pixels
-            # # Custom preprocessing function (random blur)
-            # preprocessing_function=lambda x: x * np.random.uniform(0.9, 1.1)
+            # Random rotation in the range [-30, 30] degrees
+            rotation_range=np.random.randint(-30, 30),
+            zoom_range=[0.8, 1.2],  # Random zoom in the range [0.8, 1.2]
+            width_shift_range=0.1,  # Random horizontal shift
+            height_shift_range=0.1,  # Random vertical shift
+            shear_range=0.2,  # Random shear
+            brightness_range=[0.5, 1.5],  # Random brightness adjustment
+            # channel_shift_range=20,  # Random channel shift
+            horizontal_flip=True,  # Random horizontal flip
+            vertical_flip=True,  # Random vertical flip
+            fill_mode='nearest',  # Fill mode for handling newly created pixels
+            # Custom preprocessing function (random blur)
+            preprocessing_function=lambda x: x * np.random.uniform(0.9, 1.1)
         )
 
         # Generate one augmented image

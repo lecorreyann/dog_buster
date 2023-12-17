@@ -110,3 +110,27 @@ def get_len_of_directory_with_most_imagen():
     dirs = get_datasets_path()
     dirs_len = get_dirs_len(dirs)
     return max(dirs_len)
+
+
+def plot_history(history, title='', axs=None, exp_name="", metric='accuracy'):
+    if axs is not None:
+        ax1, ax2 = axs
+    else:
+        f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+
+    if len(exp_name) > 0 and exp_name[0] != '_':
+        exp_name = '_' + exp_name
+    ax1.plot(history.history['loss'], label='train' + exp_name)
+    ax1.plot(history.history[f'val_loss'], label='val' + exp_name)
+    # ax1.set_ylim(0., 2.2)
+    ax1.set_title('loss')
+    ax1.legend()
+
+    ax2.plot(history.history[metric],
+             label=f'train {metric}' + exp_name)
+    ax2.plot(history.history[f'val_{metric}'],
+             label=f'val {metric}' + exp_name)
+    # ax2.set_ylim(0.25, 1.)
+    ax2.set_title(f'{metric.capitalize()}')
+    ax2.legend()
+    return (ax1, ax2)
