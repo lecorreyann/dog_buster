@@ -155,12 +155,15 @@ def get_train_test_datasets():
     labels = labels.numpy()
 
     # Use train_test_split to split the data
-    train_features, test_features, train_labels, test_labels = train_test_split(
+    temp_features, test_features, temp_labels, test_labels = train_test_split(
         features, labels, test_size=0.2, random_state=42
     )
-
+    train_features, val_features, train_labels, val_labels = train_test_split(
+        temp_features, temp_labels, test_size=0.2, random_state=42
+    )
     # Create new TensorFlow datasets from the splits
     train_dataset = Dataset.from_tensor_slices((train_features, train_labels))
+    val_dataset = Dataset.from_tensor_slices((val_features, val_labels))
     test_dataset = Dataset.from_tensor_slices((test_features, test_labels))
 
     # Optionally, you can further configure your TensorFlow datasets
@@ -169,7 +172,7 @@ def get_train_test_datasets():
         buffer_size=10000).batch(batch_size=8)
     test_dataset = test_dataset.batch(batch_size=8)
 
-    return train_dataset, test_dataset
+    return train_dataset,val_dataset, test_dataset
 
 
 def get_dataset():
