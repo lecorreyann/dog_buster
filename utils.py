@@ -145,7 +145,7 @@ def get_train_test_datasets():
         label_mode="categorical",
         seed=123,
         image_size=(255, 255),
-        batch_size=8
+        batch_size=602,
     )
 
     # Convert the TensorFlow dataset to a NumPy array to use train_test_split
@@ -158,6 +158,7 @@ def get_train_test_datasets():
     temp_features, test_features, temp_labels, test_labels = train_test_split(
         features, labels, test_size=0.2, random_state=42
     )
+    print(temp_features.shape,test_features.shape)
     train_features, val_features, train_labels, val_labels = train_test_split(
         temp_features, temp_labels, test_size=0.2, random_state=42
     )
@@ -165,12 +166,14 @@ def get_train_test_datasets():
     train_dataset = Dataset.from_tensor_slices((train_features, train_labels))
     val_dataset = Dataset.from_tensor_slices((val_features, val_labels))
     test_dataset = Dataset.from_tensor_slices((test_features, test_labels))
-
+    print('Hello World')
     # Optionally, you can further configure your TensorFlow datasets
     # For example, you can shuffle and batch the datasets
     train_dataset = train_dataset.shuffle(
         buffer_size=10000).batch(batch_size=8)
+    val_dataset = val_dataset.batch(batch_size=8)
     test_dataset = test_dataset.batch(batch_size=8)
+
 
     return train_dataset,val_dataset, test_dataset
 
