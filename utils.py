@@ -2,8 +2,11 @@ import os
 import numpy as np
 from PIL import Image
 from tensorflow.keras.preprocessing.image import img_to_array as img_to_array_keras, array_to_img
+from tensorflow.keras.utils import image_dataset_from_directory
+from tensorflow.data import Dataset
 import matplotlib.pyplot as plt
 import cv2
+from sklearn.model_selection import train_test_split
 
 # Return a list of images path from a directory
 
@@ -75,20 +78,15 @@ def get_datasets_path():
     '''
     Return a list of children datasets path
     '''
-    root_directory = os.environ.get('DATASETS_PATH')
+    root_directory = os.environ.get('DATASET_PATH')
     dirs = []
     for dirpath, dirnames, filenames in os.walk(root_directory):
         depth = dirpath[len(root_directory) +
                         len(os.path.sep):].count(os.path.sep)
+
         if depth == 0:
             for dirname in dirnames:
-                dir_full_path = os.path.join(dirpath, dirname)
-                depth = dir_full_path[len(
-                    root_directory) + len(os.path.sep):].count(os.path.sep)
-                if depth == 1:
-                    dir_relative_path = os.path.relpath(
-                        dir_full_path, root_directory)
-                    dirs.append(root_directory + '/' + dir_relative_path)
+                dirs.append(root_directory + '/' + dirname)
     return dirs
 
 # Get the length of each directory
@@ -134,3 +132,37 @@ def plot_history(history, title='', axs=None, exp_name="", metric='accuracy'):
     ax2.set_title(f'{metric.capitalize()}')
     ax2.legend()
     return (ax1, ax2)
+
+
+def get_train_test_datasets():
+    data = image_dataset_from_directory(
+        os.environ.get('DATASET_PATH'),
+        labels="inferred",
+        label_mode="categorical",
+        seed=123,
+        image_size=(255, 255),
+        batch_size=8
+    )
+
+    # Convert the TensorFlow dataset to a NumPy array to use train_test_split
+    # Assuming datasets contains only one batch
+    features, labels = next(iter(data))
+    features = features.numpy()
+    labels = labels.numpy()
+
+    # Use train_test_split to split the data
+    train_features, test_features, train_labels, test_labels = train_test_split(
+        features, labels, test_size=0.2, random_state=42
+    )
+
+    # Create new TensorFlow datasets from the splits
+    train_dataset = Dataset.from_tensor_slices((train_features, train_labels))
+    test_dataset = Dataset.from_tensor_slices((test_features, test_labels))
+
+    # Optionally, you can further configure your TensorFlow datasets
+    # For example, you can shuffle and batch the datasets
+    train_dataset = train_dataset.shuffle(
+        buffer_size=10000).batch(batch_size=8)
+    test_dataset = test_dataset.batch(batch_size=8)
+
+    return train_dataset, test_dataset
