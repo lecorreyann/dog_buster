@@ -177,7 +177,7 @@ def get_dataset():
     url = os.environ.get('DATASET_ZIP_PATH')
 
     # Get the dataset path from the environment variables
-    dataset_path = os.environ.get('DATASET_PATH')
+    dataset_path = './'
 
     # Create the directory if it does not exist
     os.makedirs(dataset_path, exist_ok=True)
@@ -189,3 +189,12 @@ def get_dataset():
     # Unzip the file
     with zipfile.ZipFile(output, 'r') as zip_ref:
         zip_ref.extractall(dataset_path)
+
+    # remove file.zip
+    os.remove(output)
+
+    # remove dir __MACOSX and all its content
+    os.system('rm -rf ' + dataset_path + '__MACOSX')
+
+    # remove dir .DS_Store
+    os.system('rm -rf ' + dataset_path + '.DS_Store')

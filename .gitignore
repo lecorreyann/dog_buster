@@ -2,4 +2,6 @@ raw_data/
 .python-version
 .env
 Dataset/
-raw_data/
+__MACOSX
+file.zip
+.DS_Store
