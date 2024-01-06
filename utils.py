@@ -7,6 +7,10 @@ from tensorflow.data import Dataset
 import matplotlib.pyplot as plt
 import cv2
 from sklearn.model_selection import train_test_split
+import requests
+import zipfile
+import io
+import gdown
 
 # Return a list of images path from a directory
 
@@ -166,3 +170,22 @@ def get_train_test_datasets():
     test_dataset = test_dataset.batch(batch_size=8)
 
     return train_dataset, test_dataset
+
+
+def get_dataset():
+    # URL of the zip file
+    url = os.environ.get('DATASET_ZIP_PATH')
+
+    # Get the dataset path from the environment variables
+    dataset_path = os.environ.get('DATASET_PATH')
+
+    # Create the directory if it does not exist
+    os.makedirs(dataset_path, exist_ok=True)
+
+    # Download the file
+    output = os.path.join(dataset_path, 'file.zip')
+    gdown.download(url, output, quiet=False)
+
+    # Unzip the file
+    with zipfile.ZipFile(output, 'r') as zip_ref:
+        zip_ref.extractall(dataset_path)
