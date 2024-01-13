@@ -7,11 +7,12 @@ from tensorflow.data import Dataset
 import matplotlib.pyplot as plt
 import cv2
 from sklearn.model_selection import train_test_split
-import requests
 import zipfile
-import io
 import gdown
-
+import time
+from cloudinary import CloudinaryImage, uploader, config
+import requests
+from io import BytesIO
 # Return a list of images path from a directory
 
 
@@ -26,7 +27,7 @@ def load_img_path_from_dir(dir_path):
 
 
 # load img
-def load_img(path, width=255, height=255):
+def load_img(path, width=int(os.environ.get('WIDTH')), height=int(os.environ.get('HEIGHT'))):
     '''
     Return an image
     '''
@@ -38,7 +39,7 @@ def load_img(path, width=255, height=255):
 # resize img
 
 
-def resize_img(img, height=255, width=255, channels=3):
+def resize_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
     '''
     Return a resized image
     '''
@@ -50,7 +51,7 @@ def resize_img(img, height=255, width=255, channels=3):
 # reshape img
 
 
-def reshape_img(img, height=255, width=255, channels=3):
+def reshape_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
     '''
     Return a reshaped image
     '''
@@ -75,44 +76,37 @@ def img_to_array(img_path):
     # plt.show()
     return img
 
-# Get the list of children datasets path
-
-
-def get_datasets_path():
+def getImage(url):
     '''
-    Return a list of children datasets path
+    Get an image from an url
     '''
-    root_directory = os.environ.get('DATASET_PATH')
-    dirs = []
-    for dirpath, dirnames, filenames in os.walk(root_directory):
-        depth = dirpath[len(root_directory) +
-                        len(os.path.sep):].count(os.path.sep)
+    response = requests.get(url)
+    img = Image.open(BytesIO(response.content))
+    return img
 
-        if depth == 0:
-            for dirname in dirnames:
-                dirs.append(root_directory + '/' + dirname)
-    return dirs
-
-# Get the length of each directory
-
-
-def get_dirs_len(dirs):
+def img_to_array_from_api(url):
     '''
-    Return a list of the length of each directory
+    Return a numpy array of an image
     '''
-    return [len(load_img_path_from_dir(dir)) for dir in dirs]
+    # get image from url
+    img = getImage(url)
+    img = img_to_array_keras(img)
+    img = np.expand_dims(img, axis=0)
+    img = resize_img(img)
+    img = reshape_img(img)
+    # display the image
+    # quit extra dimension
+    # plt.imshow(array_to_img(img[0].astype(np.uint8)))
+    # plt.show()
+    return img
 
-# Get the length of the directory with the most images
-
-
-def get_len_of_directory_with_most_imagen():
+def upload_img_to_cloudinary(bytes_data, public_id):
     '''
-    Return the length of the directory with the most images
+    Upload an image to cloudinary
     '''
-    dirs = get_datasets_path()
-    dirs_len = get_dirs_len(dirs)
-    return max(dirs_len)
-
+    # upload image to cloudinary
+    result=uploader.upload(bytes_data, public_id = public_id)
+    return result
 
 def plot_history(history, title='', axs=None, exp_name="", metric='accuracy'):
     if axs is not None:
@@ -138,35 +132,95 @@ def plot_history(history, title='', axs=None, exp_name="", metric='accuracy'):
     return (ax1, ax2)
 
 
-def get_train_test_datasets():
-    data = image_dataset_from_directory(
-        os.environ.get('DATASET_PATH'),
+'''
+Get the train, validation and test datasets
+'''
+
+
+def get_train_test_datasets(
+        dir_train_0=os.environ.get('DOGS_DATASET_TRAIN_PATH') + '/0',
+        dir_train_1=os.environ.get('DOGS_DATASET_TRAIN_PATH') + '/1',
+        dir_test_1=os.environ.get('DOGS_DATASET_TEST_PATH') + '/1',
+        batch_size=602,
+        img_width=int(int(os.environ.get('WIDTH'))),
+        img_height=int(int(os.environ.get('HEIGHT')))):
+
+    # labels = last split of the path
+    label_dir_train_0 = dir_train_0.split('/')[-1]
+    label_dir_train_1 = dir_train_1.split('/')[-1]
+    label_dir_test_1 = dir_test_1.split('/')[-1]
+
+    # generate train_tmp dir name from timestamp
+    train_tmp_dir_name = dir_train_0 + '/../../' + \
+        'Train_tmp_' + str(int(time.time()))
+
+    # generate test_tmp dir name from timestamp
+    test_tmp_dir_name = dir_test_1 + '/../../' + \
+        'Test_tmp_' + str(int(time.time()))
+
+    # create temp dir
+    os.makedirs(train_tmp_dir_name, exist_ok=True)
+
+    # create temp dir for train_0
+    os.makedirs(train_tmp_dir_name + '/' + label_dir_train_0, exist_ok=True)
+
+    # create temp dir for train_1
+    os.makedirs(train_tmp_dir_name + '/' + label_dir_train_1, exist_ok=True)
+
+    # copy content of dir_train_0 to tmp
+    os.system('cp -r ' + dir_train_0 + '/* ' +
+              train_tmp_dir_name + '/' + label_dir_train_0)
+
+    # copy content of dir_train_1 to tmp
+    os.system('cp -r ' + dir_train_1 + '/* ' +
+              train_tmp_dir_name + '/' + label_dir_train_1)
+
+    # create temp dir
+    os.makedirs(test_tmp_dir_name, exist_ok=True)
+
+    # create temp dir for test_1
+    os.makedirs(test_tmp_dir_name + '/' + label_dir_test_1, exist_ok=True)
+
+    # copy content of dir_test_1 to tmp
+    os.system('cp -r ' + dir_test_1 + '/* ' +
+              test_tmp_dir_name + '/' + label_dir_test_1)
+
+    data_train = image_dataset_from_directory(
+        train_tmp_dir_name,
         labels="inferred",
         label_mode="categorical",
         seed=123,
-        image_size=(255, 255),
-        batch_size=602,
+        image_size=(img_width, img_height),
+        batch_size=batch_size,
+    )
+
+    data_test = image_dataset_from_directory(
+        test_tmp_dir_name,
+        labels="inferred",
+        label_mode="categorical",
+        seed=123,
+        image_size=(img_width, img_height),
+        batch_size=batch_size,
     )
 
     # Convert the TensorFlow dataset to a NumPy array to use train_test_split
     # Assuming datasets contains only one batch
-    features, labels = next(iter(data))
-    features = features.numpy()
-    labels = labels.numpy()
+    features_train, labels_train = next(iter(data_train))
+    features_train = features_train.numpy()
+    labels_train = labels_train.numpy()
 
-    # Use train_test_split to split the data
-    temp_features, test_features, temp_labels, test_labels = train_test_split(
-        features, labels, test_size=0.2, random_state=42
-    )
-    print(temp_features.shape,test_features.shape)
+    features_test, labels_test = next(iter(data_test))
+    features_test = features_test.numpy()
+    labels_test = labels_test.numpy()
+
     train_features, val_features, train_labels, val_labels = train_test_split(
-        temp_features, temp_labels, test_size=0.2, random_state=42
+        features_train, labels_train, test_size=0.2, random_state=42
     )
     # Create new TensorFlow datasets from the splits
     train_dataset = Dataset.from_tensor_slices((train_features, train_labels))
     val_dataset = Dataset.from_tensor_slices((val_features, val_labels))
-    test_dataset = Dataset.from_tensor_slices((test_features, test_labels))
-    print('Hello World')
+    test_dataset = Dataset.from_tensor_slices((features_test, labels_test))
+
     # Optionally, you can further configure your TensorFlow datasets
     # For example, you can shuffle and batch the datasets
     train_dataset = train_dataset.shuffle(
@@ -174,8 +228,16 @@ def get_train_test_datasets():
     val_dataset = val_dataset.batch(batch_size=8)
     test_dataset = test_dataset.batch(batch_size=8)
 
+    # remove tmp dir
+    os.system('rm -rf ' + train_tmp_dir_name)
+    os.system('rm -rf ' + test_tmp_dir_name)
 
-    return train_dataset,val_dataset, test_dataset
+    return train_dataset, val_dataset, test_dataset, features_train, features_test
+
+
+'''
+Get the dataset from the URL and unzip it
+'''
 
 
 def get_dataset():
