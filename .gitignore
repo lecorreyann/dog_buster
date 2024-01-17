@@ -6,3 +6,4 @@ __MACOSX
 file.zip
 .DS_Store
 models/
+.streamlit/*
