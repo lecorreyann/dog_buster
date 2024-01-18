@@ -13,6 +13,8 @@ import time
 from cloudinary import CloudinaryImage, uploader, config
 import requests
 from io import BytesIO
+from streamlit import runtime
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 # Return a list of images path from a directory
 
 
@@ -84,30 +86,6 @@ def getImage(url):
     img = Image.open(BytesIO(response.content))
     return img
 
-def img_to_array_from_api(url):
-    '''
-    Return a numpy array of an image
-    '''
-    # get image from url
-    img = getImage(url)
-    img = img_to_array_keras(img)
-    img = np.expand_dims(img, axis=0)
-    img = resize_img(img)
-    img = reshape_img(img)
-    # display the image
-    # quit extra dimension
-    # plt.imshow(array_to_img(img[0].astype(np.uint8)))
-    # plt.show()
-    return img
-
-def upload_img_to_cloudinary(bytes_data, public_id):
-    '''
-    Upload an image to cloudinary
-    '''
-    # upload image to cloudinary
-    result=uploader.upload(bytes_data, public_id = public_id)
-    return result
-
 def plot_history(history, title='', axs=None, exp_name="", metric='accuracy'):
     if axs is not None:
         ax1, ax2 = axs
@@ -132,11 +110,6 @@ def plot_history(history, title='', axs=None, exp_name="", metric='accuracy'):
     return (ax1, ax2)
 
 
-'''
-Get the train, validation and test datasets
-'''
-
-
 def get_train_test_datasets(
         dir_train_0=os.environ.get('DOGS_DATASET_TRAIN_PATH') + '/0',
         dir_train_1=os.environ.get('DOGS_DATASET_TRAIN_PATH') + '/1',
@@ -144,6 +117,10 @@ def get_train_test_datasets(
         batch_size=602,
         img_width=int(int(os.environ.get('WIDTH'))),
         img_height=int(int(os.environ.get('HEIGHT')))):
+
+    '''
+    Get the train, validation and test datasets
+    '''
 
     # labels = last split of the path
     label_dir_train_0 = dir_train_0.split('/')[-1]
