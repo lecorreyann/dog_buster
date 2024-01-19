@@ -44,6 +44,7 @@ def create_user():
         else:
             st.error('Please fill in the form')
             return False
+
 create_tables()
 username,user_id =check_password()
 st.write(user_id)
@@ -72,7 +73,7 @@ with tab3:
     options = st.selectbox('Choose an option',['upload an image','take a photo'])
 
     # Get the location of the user
-    lat,lon = get_lon_lat()
+    #lat,lon = get_lon_lat()
     # Gather the data with a camera
     if 'take a photo' in options:
         img_file = st.camera_input('Take a photo 📸')
@@ -86,7 +87,7 @@ with tab3:
             img = img_to_array_from_api(result['url'])
 
             # Upload the image to the database
-            upload_animal(result['url'],lat,lon)
+            upload_animal(result['url'])
             #predict with model
             prediction = model.predict(img)
             st.write(prediction)
@@ -96,6 +97,7 @@ with tab3:
         img_file_buffer = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
         if img_file_buffer is not None:
             bytes_data = Image.open(img_file_buffer)
+            bytes_data = bytes_data.tobytes()
 
             # Upload the image to cloudinary
             result = upload_img_to_cloudinary(bytes_data, public_id = f"dog_found_{time.time()}")
@@ -104,6 +106,6 @@ with tab3:
             img = img_to_array_from_api(result['url'])
 
             # Upload the image to the database
-            upload_animal(result['url'],lat,lon)
+            upload_animal(result['url'])
             prediction = model.predict(img)
             st.write(prediction)

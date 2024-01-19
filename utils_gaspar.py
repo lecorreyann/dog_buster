@@ -5,6 +5,7 @@ from cloudinary import CloudinaryImage, uploader, config
 from io import BytesIO
 from PIL import Image
 from utils import *
+import streamlit as st
 from streamlit_geolocation import streamlit_geolocation
 from streamlit_js_eval import streamlit_js_eval, copy_to_clipboard, create_share_link, get_geolocation
 
@@ -61,6 +62,24 @@ def upload_user(username,password):
     connection.close()
     return True
 
+def get_if_password_correct(username,password):
+    '''Get the user id'''
+    # Connect to the database
+    cursor,connection = create_tables()
+    # Insert the data
+    insert_query = f'''
+        SELECT password FROM usuarios WHERE email = '{username}'
+    '''
+    cursor.execute(insert_query)
+    password_db = cursor.fetchone()[0]
+    connection.commit()
+    # Close the connection
+    connection.close()
+    if password_db == password:
+        return True
+    else:
+        return False
+
 def get_user_id(username):
     '''Get the user id'''
     # Connect to the database
@@ -93,35 +112,29 @@ def upload_user_pet(username,url):
     connection.close()
     return True
 
-def upload_animal(url,lat,ln):
+def upload_animal(url):
     '''Uploads the user to the database'''
     # Connect to the database
     cursor,connection = create_tables()
+
+    # Get the address
+    address,lat,ln = get_address()
+    st.write(f"""{address['address'].get('road','')} {address['address'].get('house_number','')},
+            {address['address'].get('town','')}, {address['address'].get('country','')}""")
+
+    address = f"""{address['address'].get('road','')} {address['address'].get('house_number','')},
+            {address['address'].get('town','')}, {address['address'].get('country','')}"""
     # Insert the data
+
     insert_query = f'''
-        INSERT INTO animales (url,lat,ln)
-        VALUES ('{url}','{lat}','{ln}')
+        INSERT INTO animales (url,lat,ln,address)
+        VALUES ('{url}','{lat}','{ln}','{address}')
     '''
     cursor.execute(insert_query)
     connection.commit()
-    # Close the connection
+    #Close the connection
     connection.close()
     return True
-
-def get_ip():
-    '''
-    get the user IP
-    '''
-    response = requests.get(f'https://ipinfo.io?token={os.environ.get("IPINFO_TOKEN")}').json()
-    return response
-
-def get_location():
-    '''
-    get the user location
-    '''
-    lat,lon = get_ip()['loc'].split(',')
-    response = requests.get(f'https://api.mapbox.com/search/searchbox/v1/reverse?longitude={lon}&latitude={lat}&access_token={os.environ.get("mapbox_key")}').json()
-    return response
 
 def upload_img_to_cloudinary(bytes_data, public_id):
     '''
@@ -175,4 +188,4 @@ def get_address():
     latitude,longitude = get_lon_lat()
     location = requests.get(
             f'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}').json()
-    return location
+    return location, latitude, longitude
