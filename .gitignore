@@ -7,3 +7,4 @@ file.zip
 .DS_Store
 models/
 .streamlit/*
+animales.db
