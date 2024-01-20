@@ -1,245 +1,302 @@
-import os
-import numpy as np
-from PIL import Image
-from tensorflow.keras.preprocessing.image import img_to_array as img_to_array_keras, array_to_img
-from tensorflow.keras.utils import image_dataset_from_directory
-from tensorflow.data import Dataset
-import matplotlib.pyplot as plt
-import cv2
-from sklearn.model_selection import train_test_split
-import zipfile
-import gdown
-import time
-from cloudinary import CloudinaryImage, uploader, config
+import cloudinary
+from cloudinary.uploader import upload
+import sqlite3
 import requests
-from io import BytesIO
-from streamlit import runtime
-from streamlit.runtime.scriptrunner import get_script_run_ctx
-# Return a list of images path from a directory
+import os
+from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img, img_to_array
+from tensorflow.keras.applications import VGG16
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten, Dropout
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.regularizers import l2
+import imgaug.augmenters as iaa
+from utils_gaspar import create_tables,get_address
 
+cloudinary.config(
+cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'),
+api_key = os.environ.get('CLOUDINARY_CLOUD_KEY'),
+api_secret = os.environ.get('CLOUDINARY_CLOUD_SECRET_KEY')
+)
 
-def load_img_path_from_dir(dir_path):
-    '''
-    Return a list of images path from a directory
-    '''
-    imgs_path = []
-    for filename in os.listdir(dir_path):
-        imgs_path.append(dir_path + '/' + filename)
-    return imgs_path
+def upload_image(bytes, user_id, table_name, lat=None, ln=None, address=None, found=False):
+    # Upload image to cloudinary
+    response = upload(bytes, folder="dog_buster")
+    # Get the url
+    url = response["secure_url"]
+    # Connect to the database
+    cursor, connection = create_tables()
+    # Insert the image url into the database
+    if (table_name == "animales"):
+        address,lat,ln = get_address()
+        address = f"""{address['address'].get('road','')} {address['address'].get('house_number','')},
+            {address['address'].get('town','')}, {address['address'].get('country','')}"""
+        insert_image = '''
+            INSERT INTO animales (url,lat,ln,address,found)
+            VALUES (?, ?, ?, ?, ?)
+        '''
+        # Execute the query
+        cursor.execute(insert_image, (url, lat, ln, address, found))
+    elif (table_name == "mascotas"):
+        insert_image = '''
+            INSERT INTO mascotas (url, user_id)
+            VALUES (?, ?)
+        '''
+        # Execute the query
+        cursor.execute(insert_image, (url, user_id))
+    # Commit the changes
+    connection.commit()
+    # Close the connection
+    connection.close()
+    return url
 
-
-# load img
-def load_img(path, width=int(os.environ.get('WIDTH')), height=int(os.environ.get('HEIGHT'))):
-    '''
-    Return an image
-    '''
-    # Load the image
-    img = cv2.imread(path)
-    img = cv2.resize(img, (width, height))
-    return img
-
-# resize img
-
-
-def resize_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
-    '''
-    Return a resized image
-    '''
-
-    # Resize the image
-    img = np.resize(img, (height, width, channels))
-    return img
-
-# reshape img
-
-
-def reshape_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
-    '''
-    Return a reshaped image
-    '''
-    img = img.reshape((-1, height, width, channels))
-    return img
-
-# convert img to array
-
-
-def img_to_array(img_path):
-    '''
-    Return a numpy array of an image
-    '''
-    img = load_img(img_path)
-    img = img_to_array_keras(img)
-    img = np.expand_dims(img, axis=0)
-    img = resize_img(img)
-    img = reshape_img(img)
-    # display the image
-    # quit extra dimension
-    # plt.imshow(array_to_img(img[0].astype(np.uint8)))
-    # plt.show()
-    return img
-
-def getImage(url):
-    '''
-    Get an image from an url
-    '''
+def download_image(url, dir):
+    # Download image from the URL
     response = requests.get(url)
-    img = Image.open(BytesIO(response.content))
-    return img
 
-def plot_history(history, title='', axs=None, exp_name="", metric='accuracy'):
-    if axs is not None:
-        ax1, ax2 = axs
-    else:
-        f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    # Check if the request was successful (status code 200)
+    if response.status_code == 200:
+        # Extract the file name from the URL
+        file_name = os.path.join(dir, url.split("/")[-1])
 
-    if len(exp_name) > 0 and exp_name[0] != '_':
-        exp_name = '_' + exp_name
-    ax1.plot(history.history['loss'], label='train' + exp_name)
-    ax1.plot(history.history[f'val_loss'], label='val' + exp_name)
-    # ax1.set_ylim(0., 2.2)
-    ax1.set_title('loss')
-    ax1.legend()
-
-    ax2.plot(history.history[metric],
-             label=f'train {metric}' + exp_name)
-    ax2.plot(history.history[f'val_{metric}'],
-             label=f'val {metric}' + exp_name)
-    # ax2.set_ylim(0.25, 1.)
-    ax2.set_title(f'{metric.capitalize()}')
-    ax2.legend()
-    return (ax1, ax2)
+        # Save the image content to a local file
+        with open(file_name, 'wb') as file:
+            file.write(response.content)
 
 
-def get_train_test_datasets(
-        dir_train_0=os.environ.get('DOGS_DATASET_TRAIN_PATH') + '/0',
-        dir_train_1=os.environ.get('DOGS_DATASET_TRAIN_PATH') + '/1',
-        dir_test_1=os.environ.get('DOGS_DATASET_TEST_PATH') + '/1',
-        batch_size=602,
-        img_width=int(int(os.environ.get('WIDTH'))),
-        img_height=int(int(os.environ.get('HEIGHT')))):
+def augmentate_picture(url, output_dir, num_augmentations):
+    # Transform the image into an array
+    img = load_img(url)
+    img_array = img_to_array(img)
+    # Reshape the array
+    img_array = img_array.reshape((1,) + img_array.shape)
+    # Create a generator
+    datagen = ImageDataGenerator(
+        zoom_range=0.2,       # Randomly zoom in/out
+        horizontal_flip=True,  # Randomly flip horizontally
+        vertical_flip=True,    # Randomly flip vertically
+        rotation_range=45      # Randomly rotate the image up to 45 degrees
+    )
+    # Generate num_augmentations augmented images
+    i = 0
+    for batch in datagen.flow(img_array, batch_size=1, save_to_dir=output_dir, save_prefix="augmented", save_format="jpeg"):
+        i += 1
+        if i >= num_augmentations:
+            break
 
-    '''
-    Get the train, validation and test datasets
-    '''
 
-    # labels = last split of the path
-    label_dir_train_0 = dir_train_0.split('/')[-1]
-    label_dir_train_1 = dir_train_1.split('/')[-1]
-    label_dir_test_1 = dir_test_1.split('/')[-1]
+wished_train_qt = 50  # Number of images wished to train the model
+wished_val_qt = 15  # Number of images wished to validate the model
+# Number of images wished to train and validate the model
+wished_images_qt = wished_train_qt + wished_val_qt
 
-    # generate train_tmp dir name from timestamp
-    train_tmp_dir_name = dir_train_0 + '/../../' + \
-        'Train_tmp_' + str(int(time.time()))
 
-    # generate test_tmp dir name from timestamp
-    test_tmp_dir_name = dir_test_1 + '/../../' + \
-        'Test_tmp_' + str(int(time.time()))
+def get_dir_train_dir_val(user_id):
+    """
+    DIR TRAIN
+    """
+    # Connect to the database
+    cursor, connection = create_tables()
+    # Get the url
+    cursor.execute(f"SELECT url FROM mascotas WHERE user_id = {user_id}")
+    # Get the results
+    results = cursor.fetchall()
+    # Close the connection
+    connection.close()
+    # Get only the urls
+    urls_mascotas = [url[0] for url in results]
 
-    # create temp dir
-    os.makedirs(train_tmp_dir_name, exist_ok=True)
+    # Create a temporary train directory
+    if not os.path.exists("train_" + str(user_id)):
+        os.mkdir("train_" + str(user_id))
 
-    # create temp dir for train_0
-    os.makedirs(train_tmp_dir_name + '/' + label_dir_train_0, exist_ok=True)
+    # Create a temporary directory inside the train directory to store the images user uploaded
+    if not os.path.exists("train_" + str(user_id) + "/target"):
+        os.mkdir("train_" + str(user_id) + "/target")
 
-    # create temp dir for train_1
-    os.makedirs(train_tmp_dir_name + '/' + label_dir_train_1, exist_ok=True)
+    # Download the images from the urls inside the train/target directory
+    for url in urls_mascotas:
+        download_image(url, "train_" + str(user_id) + "/target")
 
-    # copy content of dir_train_0 to tmp
-    os.system('cp -r ' + dir_train_0 + '/* ' +
-              train_tmp_dir_name + '/' + label_dir_train_0)
+    # Count the number of images inside the train_<user_id>/target directory
+    image_train_qt = len([file for file in os.listdir("train_" + str(user_id) + "/target")
+                          if os.path.isfile(os.path.join("train_" + str(user_id) + "/target", file))])
 
-    # copy content of dir_train_1 to tmp
-    os.system('cp -r ' + dir_train_1 + '/* ' +
-              train_tmp_dir_name + '/' + label_dir_train_1)
+    # If the number of images is less than the wished number of images to train the model
+    if image_train_qt < wished_images_qt:
+        # Get all the images path inside the train_<user_id>/target directory
+        images_path = [os.path.join("train_" + str(user_id) + "/target", file) for file in
+                       os.listdir("train_" + str(user_id) + "/target")]
 
-    # create temp dir
-    os.makedirs(test_tmp_dir_name, exist_ok=True)
+        # While the number of images is less than the wished number of images to train the model
+        while image_train_qt < wished_images_qt:
+            # Loop through the images path
+            for image_path in images_path:
+                # If the number of images is equal to the wished number of images to train the model
+                if image_train_qt == wished_images_qt:
+                    break
 
-    # create temp dir for test_1
-    os.makedirs(test_tmp_dir_name + '/' + label_dir_test_1, exist_ok=True)
+                # Augmentate the images
+                augmentate_picture(
+                    url=image_path, output_dir="train_" + str(user_id) + "/target", num_augmentations=1)
+                # Count the number of images inside the train/target directory
+                image_train_qt = len([file for file in os.listdir("train_" + str(user_id) + "/target")
+                                      if os.path.isfile(os.path.join("train_" + str(user_id) + "/target", file))])
+                print(image_path)
+                print(image_train_qt)
+    # Create a temporary directory inside the train directory to store the images of other users
+    if not os.path.exists("train_" + str(user_id) + "/other"):
+        os.mkdir("train_" + str(user_id) + "/other")
 
-    # copy content of dir_test_1 to tmp
-    os.system('cp -r ' + dir_test_1 + '/* ' +
-              test_tmp_dir_name + '/' + label_dir_test_1)
+    # Copy/Past the images from ./Dataset/Train to ./train_<user_id>/other
+    for file in os.listdir("Dataset/Train"):
+        os.system(f"cp Dataset/Train/{file} train_{user_id}/other")
 
-    data_train = image_dataset_from_directory(
-        train_tmp_dir_name,
-        labels="inferred",
-        label_mode="categorical",
-        seed=123,
-        image_size=(img_width, img_height),
+    """
+    DIR VAL
+    """
+    # Create a temporary val directory
+    if not os.path.exists("val_" + str(user_id)):
+        os.mkdir("val_" + str(user_id))
+
+    # Create a temporary directory inside the val directory to store the images user uploaded
+    if not os.path.exists("val_" + str(user_id) + "/target"):
+        os.mkdir("val_" + str(user_id) + "/target")
+
+    # Cut and Past 15 random images from train_<user_id>/target to val_<user_id>/target
+    for file in os.listdir("train_" + str(user_id) + "/target"):
+        os.system(f"mv train_{user_id}/target/{file} val_{user_id}/target")
+        if len(os.listdir("val_" + str(user_id) + "/target")) == wished_val_qt:
+            break
+
+    # Create a temporary directory inside the val directory to store the images of other users
+    if not os.path.exists("val_" + str(user_id) + "/other"):
+        os.mkdir("val_" + str(user_id) + "/other")
+
+    # Copy/Past the images from ./Dataset/Validation to ./val_<user_id>/other
+    for file in os.listdir("Dataset/Validation"):
+        os.system(f"cp Dataset/Validation/{file} val_{user_id}/other")
+
+    # Return name of the train and val directories
+    return "train_" + str(user_id), "val_" + str(user_id)
+
+
+def remove_dir_train_dir_val(user_id):
+    # Empty the train/target directory
+    for file in os.listdir("train_" + str(user_id) + "/target"):
+        os.remove("train_" + str(user_id) + "/target/" + file)
+    # Delete the train/target directory
+    os.rmdir("train_" + str(user_id) + "/target")
+
+    # Empty the train/other directory
+    for file in os.listdir("train_" + str(user_id) + "/other"):
+        os.remove("train_" + str(user_id) + "/other/" + file)
+    # Delete the train/other directory
+    os.rmdir("train_" + str(user_id) + "/other")
+
+    # Delete the train directory
+    os.rmdir("train_" + str(user_id))
+
+    # Empty the val/target directory
+    for file in os.listdir("val_" + str(user_id) + "/target"):
+        os.remove("val_" + str(user_id) + "/target/" + file)
+    # Delete the val/target directory
+    os.rmdir("val_" + str(user_id) + "/target")
+
+    # Empty the val/other directory
+    for file in os.listdir("val_" + str(user_id) + "/other"):
+        os.remove("val_" + str(user_id) + "/other/" + file)
+    # Delete the val/other directory
+    os.rmdir("val_" + str(user_id) + "/other")
+
+    # Delete the val directory
+    os.rmdir("val_" + str(user_id))
+
+
+learning_rate = 0.0001
+l2_value = 0.0001
+
+
+def build_model(
+        learning_rate=learning_rate,
+        l2_value=l2_value):
+    # Load VGG16
+    base_model = VGG16(weights='imagenet', include_top=False,
+                       input_shape=(224, 224, 3))
+    # Freeze the layers
+    base_model.trainable = False
+    # Create the model architecture
+    vgg16 = Sequential()
+    vgg16.add(base_model)
+    vgg16.add(Flatten())
+    vgg16.add(Dense(128, activation='relu', kernel_regularizer=l2(l2_value)))
+    vgg16.add(Dropout(0.3))
+    vgg16.add(Dense(64, activation='relu', kernel_regularizer=l2(l2_value)))
+    vgg16.add(Dense(1, activation='sigmoid'))
+    # Compile the model
+    vgg16.compile(optimizer=Adam(learning_rate=learning_rate),
+                  loss='binary_crossentropy', metrics=['accuracy'])
+
+    return vgg16
+
+
+batch_size = 32
+epochs = 20
+patience = 5
+
+
+def model_fit(model, dir_train, dir_validation, batch_size=batch_size, epochs=epochs, patience=patience):
+
+    # Data augmentation
+    augmentation_seq = iaa.Sequential([
+        iaa.Sometimes(0.5, iaa.GaussianBlur(sigma=(0, 1.0))),
+        iaa.Fliplr(0.5),
+        iaa.Flipud(0.2),
+        iaa.Affine(rotate=(-45, 45)),
+        iaa.SomeOf((0, 2), [
+            iaa.Dropout((0.01, 0.1), per_channel=0.5),
+            iaa.CoarseDropout((0.03, 0.15), size_percent=(
+                0.02, 0.05), per_channel=0.2),
+            iaa.Sometimes(0.5, iaa.AdditiveGaussianNoise(
+                loc=0, scale=(0.0, 0.05*255), per_channel=0.5)),
+            iaa.Sometimes(0.5, iaa.ContrastNormalization(
+                (0.5, 2.0), per_channel=0.5)),
+            iaa.Multiply((0.5, 1.5), per_channel=0.5),
+            iaa.Grayscale(alpha=(0.0, 1.0)),
+        ]),
+    ], random_order=True)
+
+    # Create the generators
+    train_datagen = ImageDataGenerator(rescale=1./255)
+    validation_datagen = ImageDataGenerator(rescale=1./255)
+
+    train_generator = train_datagen.flow_from_directory(
+        dir_train,
+        target_size=(224, 224),
         batch_size=batch_size,
+        class_mode='binary',
+        shuffle=True
     )
 
-    data_test = image_dataset_from_directory(
-        test_tmp_dir_name,
-        labels="inferred",
-        label_mode="categorical",
-        seed=123,
-        image_size=(img_width, img_height),
+    validation_generator = validation_datagen.flow_from_directory(
+        dir_validation,
+        target_size=(224, 224),
         batch_size=batch_size,
+        class_mode='binary',
+        shuffle=False
     )
 
-    # Convert the TensorFlow dataset to a NumPy array to use train_test_split
-    # Assuming datasets contains only one batch
-    features_train, labels_train = next(iter(data_train))
-    features_train = features_train.numpy()
-    labels_train = labels_train.numpy()
-
-    features_test, labels_test = next(iter(data_test))
-    features_test = features_test.numpy()
-    labels_test = labels_test.numpy()
-
-    train_features, val_features, train_labels, val_labels = train_test_split(
-        features_train, labels_train, test_size=0.2, random_state=42
+    # Fit the model
+    history = model.fit(
+        train_generator,
+        epochs=epochs,
+        validation_data=validation_generator,
+        callbacks=[EarlyStopping(patience=patience, restore_best_weights=True)]
     )
-    # Create new TensorFlow datasets from the splits
-    train_dataset = Dataset.from_tensor_slices((train_features, train_labels))
-    val_dataset = Dataset.from_tensor_slices((val_features, val_labels))
-    test_dataset = Dataset.from_tensor_slices((features_test, labels_test))
 
-    # Optionally, you can further configure your TensorFlow datasets
-    # For example, you can shuffle and batch the datasets
-    train_dataset = train_dataset.shuffle(
-        buffer_size=10000).batch(batch_size=8)
-    val_dataset = val_dataset.batch(batch_size=8)
-    test_dataset = test_dataset.batch(batch_size=8)
+    # Evaluate the model
+    test_loss, test_acc = model.evaluate(validation_generator)
+    # test_acc is the accuracy on the validation set
+    # test_loss is the loss on the validation set
 
-    # remove tmp dir
-    os.system('rm -rf ' + train_tmp_dir_name)
-    os.system('rm -rf ' + test_tmp_dir_name)
-
-    return train_dataset, val_dataset, test_dataset, features_train, features_test
-
-
-'''
-Get the dataset from the URL and unzip it
-'''
-
-
-def get_dataset():
-    # URL of the zip file
-    url = os.environ.get('DATASET_ZIP_PATH')
-
-    # Get the dataset path from the environment variables
-    dataset_path = './'
-
-    # Create the directory if it does not exist
-    os.makedirs(dataset_path, exist_ok=True)
-
-    # Download the file
-    output = os.path.join(dataset_path, 'file.zip')
-    gdown.download(url, output, quiet=False)
-
-    # Unzip the file
-    with zipfile.ZipFile(output, 'r') as zip_ref:
-        zip_ref.extractall(dataset_path)
-
-    # remove file.zip
-    os.remove(output)
-
-    # remove dir __MACOSX and all its content
-    os.system('rm -rf ' + dataset_path + '__MACOSX')
-
-    # remove dir .DS_Store
-    os.system('rm -rf ' + dataset_path + '.DS_Store')
+    return model, history, test_loss, test_acc

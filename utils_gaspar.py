@@ -6,8 +6,12 @@ from io import BytesIO
 from PIL import Image
 from utils import *
 import streamlit as st
+import streamlit_authenticator as stauth
 from streamlit_geolocation import streamlit_geolocation
 from streamlit_js_eval import streamlit_js_eval, copy_to_clipboard, create_share_link, get_geolocation
+import re
+from tensorflow.keras.preprocessing.image import img_to_array as img_to_array_keras
+import numpy as np
 
 def create_tables():
     # Connect to the database
@@ -23,7 +27,8 @@ def create_tables():
             url VARCHAR(255),
             lat REAL,
             ln  REAL,
-            address VARCHAR(255)
+            address VARCHAR(255),
+            found BOOLEAN DEFAULT FALSE
         );
         '''
     create_pet_tables ='''
@@ -36,25 +41,51 @@ def create_tables():
         '''
     create_user_tables ='''
         CREATE TABLE IF NOT EXISTS usuarios (
+            username VARCHAR(255) UNIQUE,
+            name VARCHAR(255),
             email VARCHAR(255) UNIQUE,
             password VARCHAR(255),
             id INTEGER PRIMARY KEY AUTOINCREMENT
         );
     '''
+    create_model_tables = '''
+        CREATE TABLE IF NOT EXISTS modelos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(255) UNIQUE,
+            user_id INTEGER
+        );
+    '''
     cursor.execute(create_user_tables)
     cursor.execute(create_animals_tables)
     cursor.execute(create_pet_tables)
+    cursor.execute(create_model_tables)
     connection.commit()
     return cursor,connection
 
-def upload_user(username,password):
-    '''Uploads the user to the database'''
+def get_all_users():
+    '''Get all the users'''
     # Connect to the database
     cursor,connection = create_tables()
     # Insert the data
     insert_query = f'''
-        INSERT INTO usuarios (email,password)
-        VALUES ('{username}','{password}')
+        SELECT * FROM usuarios
+    '''
+    cursor.execute(insert_query)
+    users = cursor.fetchall()
+    connection.commit()
+    # Close the connection
+    connection.close()
+    return users
+
+def upload_user(email,name,username,password):
+    '''Uploads the user to the database'''
+    # Connect to the database
+    cursor,connection = create_tables()
+    # Insert the data
+    username = username.lower()
+    insert_query = f'''
+        INSERT INTO usuarios (username,name,email,password)
+        VALUES ('{username}','{name}','{email}','{password}')
     '''
     cursor.execute(insert_query)
     connection.commit()
@@ -62,22 +93,73 @@ def upload_user(username,password):
     connection.close()
     return True
 
-def get_if_password_correct(username,password):
-    '''Get the user id'''
+def resize_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
+    '''
+    Return a resized image
+    '''
+
+    # Resize the image
+    img = np.resize(img, (height, width, channels))
+    return img
+
+def reshape_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
+    '''
+    Return a reshaped image
+    '''
+    img = img.reshape((-1, height, width, channels))
+    return img
+
+def upload_model(username,model_name):
+    '''Uploads the user to the database'''
     # Connect to the database
     cursor,connection = create_tables()
+    # Get user_id
+    user_id = get_user_id(username)
     # Insert the data
     insert_query = f'''
-        SELECT password FROM usuarios WHERE email = '{username}'
+        INSERT INTO modelos (name,user_id)
+        VALUES ('{model_name}','{user_id}')
     '''
     cursor.execute(insert_query)
-    password_db = cursor.fetchone()[0]
     connection.commit()
     # Close the connection
     connection.close()
-    if password_db == password:
+    return True
+
+def reshape_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
+    '''
+    Return a reshaped image
+    '''
+    img = img.reshape((-1, height, width, channels))
+    return img
+
+def resize_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
+    '''
+    Return a resized image
+    '''
+
+    # Resize the image
+    img = np.resize(img, (height, width, channels))
+    return img
+
+def check_model(username):
+    try:
+        '''Check if the user has a model'''
+        # Connect to the database
+        cursor,connection = create_tables()
+        # Get user_id
+        user_id = get_user_id(username)
+        # Insert the data
+        insert_query = f'''
+            SELECT name FROM modelos WHERE user_id = '{user_id}'
+        '''
+        cursor.execute(insert_query)
+        model_name = cursor.fetchone()[0]
+        connection.commit()
+        # Close the connection
+        connection.close()
         return True
-    else:
+    except:
         return False
 
 def get_user_id(username):
@@ -86,7 +168,7 @@ def get_user_id(username):
     cursor,connection = create_tables()
     # Insert the data
     insert_query = f'''
-        SELECT id FROM usuarios WHERE email = '{username}'
+        SELECT id FROM usuarios WHERE username = '{username}'
     '''
     cursor.execute(insert_query)
     user_id = cursor.fetchone()[0]
@@ -189,3 +271,25 @@ def get_address():
     location = requests.get(
             f'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}').json()
     return location, latitude, longitude
+
+def sing_up():
+    with st.form(key='sing up', clear_on_submit=True):
+        st.subheader(':green[Sign] up')
+        email = st.text_input('Email', placeholder='Enter your Email')
+        name = st.text_input('Name', placeholder='Enter your Name')
+        username = st.text_input('Username', placeholder='Enter your Username')
+        password = st.text_input('Password', type='password', placeholder='Enter your Password')
+        password2 = st.text_input('Password', type='password', placeholder='Repeat your Password')
+        if len(name) >=3:
+            if len(password) >=5:
+                if password == password2:
+                    st.success('User created')
+                    hashed_password = stauth.Hasher([password]).generate()
+                    upload_user(email,name,username,hashed_password[0])
+                else:
+                    st.error('Passwords do not match')
+            else:
+                st.error('Password must be at least 5 characters')
+        else:
+            st.error('Name must be at least 3 characters')
+        st.form_submit_button('Sign up')

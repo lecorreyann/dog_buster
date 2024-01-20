@@ -3,6 +3,7 @@ from tensorflow.keras.applications.vgg16 import VGG16
 from tensorflow.keras import layers
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras import optimizers
+from tensorflow.keras.callbacks import EarlyStopping
 from preprocess import balance_datasets
 from utils import *
 import os
@@ -49,3 +50,13 @@ def build_model(num_classes=2):
                   optimizer=opt,
                   metrics=['accuracy'])
     return model
+
+def train_model(model,train_dataset,validation_dataset,epochs=10):
+    # $CHALLENGIFY_BEGIN
+    history = model.fit(
+        train_dataset,
+        epochs=epochs,
+        validation_data=validation_dataset,
+        callbacks = [EarlyStopping(patience = 3)]
+    )
+    return model,history
