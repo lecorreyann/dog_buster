@@ -12,7 +12,11 @@ from streamlit_js_eval import streamlit_js_eval, copy_to_clipboard, create_share
 import re
 from tensorflow.keras.preprocessing.image import img_to_array as img_to_array_keras
 import numpy as np
-
+from datetime import datetime
+from pytz import timezone
+import smtplib
+from email.message import EmailMessage
+import ssl
 def create_tables():
     # Connect to the database
     connection = sqlite3.connect('animales.db')
@@ -28,7 +32,8 @@ def create_tables():
             lat REAL,
             ln  REAL,
             address VARCHAR(255),
-            found BOOLEAN DEFAULT FALSE
+            found BOOLEAN DEFAULT FALSE,
+            viwed_at DATETIME
         );
         '''
     create_pet_tables ='''
@@ -206,11 +211,18 @@ def upload_animal(url):
 
     address = f"""{address['address'].get('road','')} {address['address'].get('house_number','')},
             {address['address'].get('town','')}, {address['address'].get('country','')}"""
+
+    # Get the current time
+    now_local = datetime.now(timezone('America/Argentina/Buenos_Aires'))
+
+    # Convert to string
+    now_local = now_local.strftime("%Y-%m-%d %H:%M:%S")
+    st.write(now_local)
     # Insert the data
 
     insert_query = f'''
-        INSERT INTO animales (url,lat,ln,address)
-        VALUES ('{url}','{lat}','{ln}','{address}')
+        INSERT INTO animales (url,lat,ln,address,viwed_at)
+        VALUES ('{url}','{lat}','{ln}','{address}','{now_local}')
     '''
     cursor.execute(insert_query)
     connection.commit()
@@ -293,3 +305,60 @@ def sing_up():
         else:
             st.error('Name must be at least 3 characters')
         st.form_submit_button('Sign up')
+
+def get_user_name(user_id):
+    # Connect to the database
+    cursor, connection = create_tables()
+    # Get the user name
+    cursor.execute(f"SELECT name FROM usuarios WHERE id = {user_id}")
+    # Get the results
+    results = cursor.fetchall()
+    # Close the connection
+    connection.close()
+    # Get only the user name
+    user_name = results[0][0]
+    return user_name
+
+def get_user_email(user_id):
+    # Connect to the database
+    cursor, connection = create_tables()
+    # Get the user name
+    cursor.execute(f"SELECT email FROM usuarios WHERE id = {user_id}")
+    # Get the results
+    results = cursor.fetchall()
+    # Close the connection
+    connection.close()
+    # Get only the user name
+    user_email = results[0][0]
+    return user_email
+
+def send_email(url,user_id):
+    '''Send an email to the user'''
+
+    # Get the user name
+    user_name = get_user_name(user_id)
+
+    # Get user email
+    user_email = get_user_email(user_id)
+    # Write the email
+    subject = "Dog Buster - Someone found your dog!"
+    body = f"""Hello {user_name}, How are you doing today?.
+    Someone found your dog! Check your dog below:
+    {url}"""
+    # Get the email_address and password
+    from_addr = os.environ.get('MAIL_USERNAME')
+    from_password = os.environ.get('MAIL_PASSWORD')
+    # Create the message
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = from_addr
+    msg['To'] = user_email
+
+    # Attach the body
+    msg.set_content(body)
+
+    context = ssl.create_default_context()
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+        server.login(from_addr, from_password)
+        server.send_message(msg)
+        server.quit()

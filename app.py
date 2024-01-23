@@ -51,6 +51,8 @@ if authentification_satus:
         st.write('Welcome to the Dog Buster App')
         st.write('This app is designed to help you find your lost dog')
         st.write('Please click on the tabs to navigate')
+        st.write(get_user_email(get_user_id(username)))
+        st.write(get_user_name(get_user_id(username)))
 
     # ------ LOST MY DOG ----------
     if selected == 'Lost my Dog':
@@ -83,7 +85,7 @@ if authentification_satus:
     if selected == 'Found a Dog':
 
         #load the model
-        model = tf.keras.models.load_model(f'models/model_{get_user_id(username)}.h5')
+        #model = tf.keras.models.load_model(f'models/model_{get_user_id(username)}.h5')
 
         # Give options to the user
         options = st.selectbox('Choose an option',['upload an image','take a photo'])
@@ -100,8 +102,8 @@ if authentification_satus:
 
                     #predict with model
                     img = img_to_array_from_api(url)
-                prediction = model.predict(img)
-                st.write(prediction)
+                #prediction = model.predict(img)
+                #st.write(prediction)
 
         # Gather the data with a file uploader
         if 'upload an image' in options:
@@ -113,7 +115,8 @@ if authentification_satus:
                 # Upload the image
                 url = upload_image(bytes=bytes_data,user_id=get_user_id(username),table_name='animales')
                 img = img_to_array_from_api(url)
-                prediction = model.predict(img)
-                st.write(prediction)
-                if prediction[0, 0] >= 0.5:
-                    st.success('This is your dog')
+                #prediction = model.predict(img)
+                #st.write(prediction)
+                #if prediction[0, 0] >= 0.5:
+                #   st.success('This is your dog')
+                send_email(url=url,user_id=get_user_id(username))

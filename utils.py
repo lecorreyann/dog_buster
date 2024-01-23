@@ -11,7 +11,7 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.regularizers import l2
 import imgaug.augmenters as iaa
-from utils_gaspar import create_tables,get_address
+from utils_gaspar import create_tables,get_address,upload_animal,upload_user,upload_user_pet
 
 cloudinary.config(
 cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'),
@@ -28,15 +28,7 @@ def upload_image(bytes, user_id, table_name, lat=None, ln=None, address=None, fo
     cursor, connection = create_tables()
     # Insert the image url into the database
     if (table_name == "animales"):
-        address,lat,ln = get_address()
-        address = f"""{address['address'].get('road','')} {address['address'].get('house_number','')},
-            {address['address'].get('town','')}, {address['address'].get('country','')}"""
-        insert_image = '''
-            INSERT INTO animales (url,lat,ln,address,found)
-            VALUES (?, ?, ?, ?, ?)
-        '''
-        # Execute the query
-        cursor.execute(insert_image, (url, lat, ln, address, found))
+        upload_animal(url)
     elif (table_name == "mascotas"):
         insert_image = '''
             INSERT INTO mascotas (url, user_id)
@@ -62,7 +54,6 @@ def download_image(url, dir):
         # Save the image content to a local file
         with open(file_name, 'wb') as file:
             file.write(response.content)
-
 
 def augmentate_picture(url, output_dir, num_augmentations):
     # Transform the image into an array
