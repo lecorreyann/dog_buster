@@ -395,16 +395,18 @@ def find_owner(img,url):
     # Close the connection
     connection.close()
     # Get only the user name
-    model_names = results[0]
+    model_names = results
 
 
-    found_god = False
+    found_dog = False
     st.write(model_names)
-    for model_name in model_names:
+    for weird_model_name in model_names:
+        #for model_name in model_names[0]:
+        model_name = weird_model_name[0]
         st.write(model_name)
         model = load_model(model_name)
         prediction = model.predict(img)
-        if prediction[0, 0] >= 0.5:
+        if prediction[0, 0] >= 0.5:# and not found_dog:
             # Get the user_id
             cursor,connection = create_tables()
             # Get the user id
@@ -420,9 +422,10 @@ def find_owner(img,url):
             st.write(user_id)
             # send the email
             send_email(url,user_id)
-            found_god = True
+            found_dog = True
             break
-    if not found_god:
+
+    if not found_dog:
         st.error('Dog not found')
     else:
         st.success('Dog found')
