@@ -11,12 +11,14 @@ from streamlit_geolocation import streamlit_geolocation
 from streamlit_js_eval import streamlit_js_eval, copy_to_clipboard, create_share_link, get_geolocation
 import re
 from tensorflow.keras.preprocessing.image import img_to_array as img_to_array_keras
+from tensorflow.keras.models import load_model
 import numpy as np
 from datetime import datetime
 from pytz import timezone
 import smtplib
 from email.message import EmailMessage
 import ssl
+
 def create_tables():
     # Connect to the database
     connection = sqlite3.connect('animales.db')
@@ -332,6 +334,20 @@ def get_user_email(user_id):
     user_email = results[0][0]
     return user_email
 
+def get_time_and_address(url):
+    # Connect to the database
+    cursor, connection = create_tables()
+    # Get the user name
+    cursor.execute(f"SELECT address,viwed_at FROM animales WHERE url = '{url}'")
+    # Get the results
+    results = cursor.fetchall()
+    # Close the connection
+    connection.close()
+    # Get only the user name
+    address = results[0][0]
+    viwed_at = results[0][1]
+    return address,viwed_at
+
 def send_email(url,user_id):
     '''Send an email to the user'''
 
@@ -340,10 +356,14 @@ def send_email(url,user_id):
 
     # Get user email
     user_email = get_user_email(user_id)
+
+    address, viewed_at = get_time_and_address(url)
     # Write the email
     subject = "Dog Buster - Someone found your dog!"
     body = f"""Hello {user_name}, How are you doing today?.
-    Someone found your dog! Check your dog below:
+    Someone found your dog!
+    That little pet was last seen at {viewed_at}, {address}.
+    Check your dog below:
     {url}"""
     # Get the email_address and password
     from_addr = os.environ.get('MAIL_USERNAME')
@@ -362,3 +382,48 @@ def send_email(url,user_id):
         server.login(from_addr, from_password)
         server.send_message(msg)
         server.quit()
+
+def find_owner(img,url):
+    '''Find the owner of the dog'''
+    # Connect to the database
+    cursor,connection = create_tables()
+
+    # Get the model
+    cursor.execute(f"SELECT name FROM modelos")
+    # Get the results
+    results = cursor.fetchall()
+    # Close the connection
+    connection.close()
+    # Get only the user name
+    model_names = results[0]
+
+
+    found_god = False
+    st.write(model_names)
+    for model_name in model_names:
+        st.write(model_name)
+        model = load_model(model_name)
+        prediction = model.predict(img)
+        if prediction[0, 0] >= 0.5:
+            # Get the user_id
+            cursor,connection = create_tables()
+            # Get the user id
+            query = f"SELECT user_id FROM modelos WHERE name = '{model_name}'"
+
+            cursor.execute(query)
+            # Get the results
+            results = cursor.fetchone()
+            # Close the connection
+            connection.close()
+
+            user_id = results[0]
+            st.write(user_id)
+            # send the email
+            send_email(url,user_id)
+            found_god = True
+            break
+    if not found_god:
+        st.error('Dog not found')
+    else:
+        st.success('Dog found')
+        return user_id

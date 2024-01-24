@@ -102,8 +102,6 @@ if authentification_satus:
 
                     #predict with model
                     img = img_to_array_from_api(url)
-                #prediction = model.predict(img)
-                #st.write(prediction)
 
         # Gather the data with a file uploader
         if 'upload an image' in options:
@@ -115,8 +113,4 @@ if authentification_satus:
                 # Upload the image
                 url = upload_image(bytes=bytes_data,user_id=get_user_id(username),table_name='animales')
                 img = img_to_array_from_api(url)
-                #prediction = model.predict(img)
-                #st.write(prediction)
-                #if prediction[0, 0] >= 0.5:
-                #   st.success('This is your dog')
-                send_email(url=url,user_id=get_user_id(username))
+        find_owner(img=img,url=url)
