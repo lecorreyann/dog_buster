@@ -4,6 +4,9 @@ import streamlit_authenticator as stauth
 import tensorflow as tf
 from utils import *
 from utils_gaspar import *
+import pandas as pd
+import numpy as np
+
 
 create_tables()
 users = get_all_users()
@@ -24,6 +27,7 @@ for index in range(len(emails)):
                                                   'email':emails[index],
                                                   'password':passwords[index]}
 
+st.set_page_config(page_title='DogBuster',page_icon='🐶',layout='wide',initial_sidebar_state='auto')
 authenticator = stauth.Authenticate(credentials,'DogBuster','abcdef')
 name,authentification_satus,username = authenticator.login("Login","main")
 if not authentification_satus:
@@ -36,6 +40,9 @@ if authentification_satus == None:
 if authentification_satus:
 
     # ------ SIDEBAR ----------
+    st.sidebar.title('DogBuster')
+    # load image from imgs folder
+    st.sidebar.image('imgs/E814FBB9-2867-491D-A1F1-4B3370CC1DD6.png',use_column_width=True)
     st.sidebar.subheader(f'Welcome {name}')
     authenticator.logout("Logout","sidebar")
     with st.sidebar:
@@ -51,8 +58,11 @@ if authentification_satus:
         st.write('Welcome to the Dog Buster App')
         st.write('This app is designed to help you find your lost dog')
         st.write('Please click on the tabs to navigate')
-        st.write(get_user_email(get_user_id(username)))
-        st.write(get_user_name(get_user_id(username)))
+        lat,lon = get_lon_lat()
+        df = pd.DataFrame(
+            np.random.randn(1000, 2) / [50, 50] + [lat, lon],
+            columns=['lat', 'lon'])
+        st.map(df)
 
     # ------ LOST MY DOG ----------
     if selected == 'Lost my Dog':
