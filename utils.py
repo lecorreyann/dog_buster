@@ -1,6 +1,5 @@
 import cloudinary
 from cloudinary.uploader import upload
-import sqlite3
 import requests
 import os
 from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img, img_to_array
@@ -11,13 +10,14 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.regularizers import l2
 import imgaug.augmenters as iaa
-from utils_gaspar import create_tables,get_address,upload_animal,upload_user,upload_user_pet
+from utils_gaspar import create_tables, upload_animal
 
 cloudinary.config(
-cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'),
-api_key = os.environ.get('CLOUDINARY_CLOUD_KEY'),
-api_secret = os.environ.get('CLOUDINARY_CLOUD_SECRET_KEY')
+    cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    api_key=os.environ.get('CLOUDINARY_CLOUD_KEY'),
+    api_secret=os.environ.get('CLOUDINARY_CLOUD_SECRET_KEY')
 )
+
 
 def upload_image(bytes, user_id, table_name, lat=None, ln=None, address=None, found=False):
     # Upload image to cloudinary
@@ -42,6 +42,7 @@ def upload_image(bytes, user_id, table_name, lat=None, ln=None, address=None, fo
     connection.close()
     return url
 
+
 def download_image(url, dir):
     # Download image from the URL
     response = requests.get(url)
@@ -54,6 +55,7 @@ def download_image(url, dir):
         # Save the image content to a local file
         with open(file_name, 'wb') as file:
             file.write(response.content)
+
 
 def augmentate_picture(url, output_dir, num_augmentations):
     # Transform the image into an array

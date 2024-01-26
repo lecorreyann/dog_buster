@@ -1,15 +1,13 @@
 import sqlite3
 import requests
 import os
-from cloudinary import CloudinaryImage, uploader, config
+from cloudinary import uploader
 from io import BytesIO
 from PIL import Image
 from utils import *
 import streamlit as st
 import streamlit_authenticator as stauth
-from streamlit_geolocation import streamlit_geolocation
-from streamlit_js_eval import streamlit_js_eval, copy_to_clipboard, create_share_link, get_geolocation
-import re
+from streamlit_js_eval import get_geolocation
 from tensorflow.keras.preprocessing.image import img_to_array as img_to_array_keras
 from tensorflow.keras.models import load_model
 import numpy as np
@@ -18,6 +16,8 @@ from pytz import timezone
 import smtplib
 from email.message import EmailMessage
 import ssl
+import streamlit as st
+
 
 def create_tables():
     # Connect to the database
@@ -38,7 +38,7 @@ def create_tables():
             viwed_at DATETIME
         );
         '''
-    create_pet_tables ='''
+    create_pet_tables = '''
         CREATE TABLE IF NOT EXISTS mascotas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             url VARCHAR(255),
@@ -46,9 +46,8 @@ def create_tables():
             FOREIGN KEY (user_id) REFERENCES usuarios (id)
         );
         '''
-    create_user_tables ='''
+    create_user_tables = '''
         CREATE TABLE IF NOT EXISTS usuarios (
-            username VARCHAR(255) UNIQUE,
             name VARCHAR(255),
             email VARCHAR(255) UNIQUE,
             password VARCHAR(255),
@@ -67,12 +66,13 @@ def create_tables():
     cursor.execute(create_pet_tables)
     cursor.execute(create_model_tables)
     connection.commit()
-    return cursor,connection
+    return cursor, connection
+
 
 def get_all_users():
     '''Get all the users'''
     # Connect to the database
-    cursor,connection = create_tables()
+    cursor, connection = create_tables()
     # Insert the data
     insert_query = f'''
         SELECT * FROM usuarios
@@ -84,21 +84,6 @@ def get_all_users():
     connection.close()
     return users
 
-def upload_user(email,name,username,password):
-    '''Uploads the user to the database'''
-    # Connect to the database
-    cursor,connection = create_tables()
-    # Insert the data
-    username = username.lower()
-    insert_query = f'''
-        INSERT INTO usuarios (username,name,email,password)
-        VALUES ('{username}','{name}','{email}','{password}')
-    '''
-    cursor.execute(insert_query)
-    connection.commit()
-    # Close the connection
-    connection.close()
-    return True
 
 def resize_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
     '''
@@ -109,6 +94,7 @@ def resize_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.g
     img = np.resize(img, (height, width, channels))
     return img
 
+
 def reshape_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
     '''
     Return a reshaped image
@@ -116,16 +102,15 @@ def reshape_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.
     img = img.reshape((-1, height, width, channels))
     return img
 
-def upload_model(username,model_name):
+
+def upload_model(model_name):
     '''Uploads the user to the database'''
     # Connect to the database
-    cursor,connection = create_tables()
-    # Get user_id
-    user_id = get_user_id(username)
+    cursor, connection = create_tables()
     # Insert the data
     insert_query = f'''
         INSERT INTO modelos (name,user_id)
-        VALUES ('{model_name}','{user_id}')
+        VALUES ('{model_name}','{st.session_state.get('user_id')}')
     '''
     cursor.execute(insert_query)
     connection.commit()
@@ -133,12 +118,14 @@ def upload_model(username,model_name):
     connection.close()
     return True
 
+
 def reshape_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
     '''
     Return a reshaped image
     '''
     img = img.reshape((-1, height, width, channels))
     return img
+
 
 def resize_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.get('WIDTH')), channels=3):
     '''
@@ -149,16 +136,15 @@ def resize_img(img, height=int(os.environ.get('HEIGHT')), width=int(os.environ.g
     img = np.resize(img, (height, width, channels))
     return img
 
-def check_model(username):
+
+def check_model():
     try:
         '''Check if the user has a model'''
         # Connect to the database
-        cursor,connection = create_tables()
-        # Get user_id
-        user_id = get_user_id(username)
+        cursor, connection = create_tables()
         # Insert the data
         insert_query = f'''
-            SELECT name FROM modelos WHERE user_id = '{user_id}'
+            SELECT name FROM modelos WHERE user_id = '{st.session_state.get('user_id')}'
         '''
         cursor.execute(insert_query)
         model_name = cursor.fetchone()[0]
@@ -169,31 +155,15 @@ def check_model(username):
     except:
         return False
 
-def get_user_id(username):
-    '''Get the user id'''
-    # Connect to the database
-    cursor,connection = create_tables()
-    # Insert the data
-    insert_query = f'''
-        SELECT id FROM usuarios WHERE username = '{username}'
-    '''
-    cursor.execute(insert_query)
-    user_id = cursor.fetchone()[0]
-    connection.commit()
-    # Close the connection
-    connection.close()
-    return user_id
 
-def upload_user_pet(username,url):
+def upload_user_pet(url):
     '''Uploads the user to the database'''
     # Connect to the database
-    cursor,connection = create_tables()
-    # Get user_id
-    user_id = get_user_id(username)
+    cursor, connection = create_tables()
     # Insert the data
     insert_query = f'''
         INSERT INTO mascotas (url,user_id)
-        VALUES ('{url}','{user_id}')
+        VALUES ('{url}','{st.session_state.get('user_id')}')
     '''
     cursor.execute(insert_query)
     connection.commit()
@@ -201,13 +171,14 @@ def upload_user_pet(username,url):
     connection.close()
     return True
 
+
 def upload_animal(url):
     '''Uploads the user to the database'''
     # Connect to the database
-    cursor,connection = create_tables()
+    cursor, connection = create_tables()
 
     # Get the address
-    address,lat,ln = get_address()
+    address, lat, ln = get_address()
     st.write(f"""{address['address'].get('road','')} {address['address'].get('house_number','')},
             {address['address'].get('town','')}, {address['address'].get('country','')}""")
 
@@ -228,17 +199,19 @@ def upload_animal(url):
     '''
     cursor.execute(insert_query)
     connection.commit()
-    #Close the connection
+    # Close the connection
     connection.close()
     return True
+
 
 def upload_img_to_cloudinary(bytes_data, public_id):
     '''
     Upload an image to cloudinary
     '''
     # upload image to cloudinary
-    result=uploader.upload(bytes_data, public_id = public_id)
+    result = uploader.upload(bytes_data, public_id=public_id)
     return result
+
 
 def getImage(url):
     '''
@@ -247,6 +220,7 @@ def getImage(url):
     response = requests.get(url)
     img = Image.open(BytesIO(response.content))
     return img
+
 
 def img_to_array_from_api(url):
     '''
@@ -264,6 +238,7 @@ def img_to_array_from_api(url):
     # plt.show()
     return img
 
+
 def get_lon_lat():
     '''
     get the user latitude and longitude
@@ -272,41 +247,21 @@ def get_lon_lat():
     if loc and 'coords' in loc:
         latitude, longitude = loc['coords']['latitude'], loc['coords']['longitude']
         print(f'Got user location:, {latitude}, {longitude}')
-        return latitude,longitude
+        return latitude, longitude
     else:
         print('No location found')
-        return None
+        return None, None
+
 
 def get_address():
     '''
     get the user address
     '''
-    latitude,longitude = get_lon_lat()
+    latitude, longitude = get_lon_lat()
     location = requests.get(
-            f'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}').json()
+        f'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}').json()
     return location, latitude, longitude
 
-def sing_up():
-    with st.form(key='sing up', clear_on_submit=True):
-        st.subheader(':green[Sign] up')
-        email = st.text_input('Email', placeholder='Enter your Email')
-        name = st.text_input('Name', placeholder='Enter your Name')
-        username = st.text_input('Username', placeholder='Enter your Username')
-        password = st.text_input('Password', type='password', placeholder='Enter your Password')
-        password2 = st.text_input('Password', type='password', placeholder='Repeat your Password')
-        if len(name) >=3:
-            if len(password) >=5:
-                if password == password2:
-                    st.success('User created')
-                    hashed_password = stauth.Hasher([password]).generate()
-                    upload_user(email,name,username,hashed_password[0])
-                else:
-                    st.error('Passwords do not match')
-            else:
-                st.error('Password must be at least 5 characters')
-        else:
-            st.error('Name must be at least 3 characters')
-        st.form_submit_button('Sign up')
 
 def get_user_name(user_id):
     # Connect to the database
@@ -321,6 +276,7 @@ def get_user_name(user_id):
     user_name = results[0][0]
     return user_name
 
+
 def get_user_email(user_id):
     # Connect to the database
     cursor, connection = create_tables()
@@ -334,11 +290,13 @@ def get_user_email(user_id):
     user_email = results[0][0]
     return user_email
 
+
 def get_time_and_address(url):
     # Connect to the database
     cursor, connection = create_tables()
     # Get the user name
-    cursor.execute(f"SELECT address,viwed_at FROM animales WHERE url = '{url}'")
+    cursor.execute(
+        f"SELECT address,viwed_at FROM animales WHERE url = '{url}'")
     # Get the results
     results = cursor.fetchall()
     # Close the connection
@@ -346,9 +304,10 @@ def get_time_and_address(url):
     # Get only the user name
     address = results[0][0]
     viwed_at = results[0][1]
-    return address,viwed_at
+    return address, viwed_at
 
-def send_email(url,user_id):
+
+def send_email(url, user_id):
     '''Send an email to the user'''
 
     # Get the user name
@@ -383,10 +342,11 @@ def send_email(url,user_id):
         server.send_message(msg)
         server.quit()
 
-def find_owner(img,url):
+
+def find_owner(img, url):
     '''Find the owner of the dog'''
     # Connect to the database
-    cursor,connection = create_tables()
+    cursor, connection = create_tables()
 
     # Get the model
     cursor.execute(f"SELECT name FROM modelos")
@@ -397,18 +357,17 @@ def find_owner(img,url):
     # Get only the user name
     model_names = results
 
-
     found_dog = False
     st.write(model_names)
     for weird_model_name in model_names:
-        #for model_name in model_names[0]:
+        # for model_name in model_names[0]:
         model_name = weird_model_name[0]
         st.write(model_name)
         model = load_model(model_name)
         prediction = model.predict(img)
-        if prediction[0, 0] >= 0.5:# and not found_dog:
+        if prediction[0, 0] >= 0.5:  # and not found_dog:
             # Get the user_id
-            cursor,connection = create_tables()
+            cursor, connection = create_tables()
             # Get the user id
             query = f"SELECT user_id FROM modelos WHERE name = '{model_name}'"
 
@@ -421,7 +380,7 @@ def find_owner(img,url):
             user_id = results[0]
             st.write(user_id)
             # send the email
-            send_email(url,user_id)
+            send_email(url, user_id)
             found_dog = True
             break
 
