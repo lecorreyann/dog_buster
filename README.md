@@ -1,6 +1,15 @@
 # Setup
-rename `.env.sample` as `.env`
+Rename `.env.sample` as `.env`
 
-fill in all the `missing data`
+Rill in all the `missing data`
 
-# W.I.P
+Run 'pip install -e'
+
+
+# Lunch the app locally
+Run `streamlit run app.py` to run the app locally
+
+# Info
+This project was developed by @GasparinB, @lecorreyann, @leonork and ...
+
+Dog Buster was developed with the intention to serve as a project and as a learning journy throughout a lot of aspects about Data, ML, MLops, DNN, RNN, CNN.
