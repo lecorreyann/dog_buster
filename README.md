@@ -3,7 +3,7 @@ Rename `.env.sample` as `.env`
 
 Rill in all the `missing data`
 
-Run 'pip install -e'
+Run `pip install -e`
 
 
 # Lunch the app locally
