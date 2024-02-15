@@ -10,6 +10,6 @@ Run `pip install -e`
 Run `streamlit run app.py` to run the app locally
 
 # Info
-This project was developed by @GasparinB, @lecorreyann, @leonork and ...
+This project was developed by @GasparinB, @lecorreyann, @leonork and @JoaquinAntunez
 
 Dog Buster was developed with the intention to serve as a project and as a learning journy throughout a lot of aspects about Data, ML, MLops, DNN, RNN, CNN.
